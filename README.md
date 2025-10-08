@@ -1,10 +1,23 @@
 # Song Recommendation System
 
-## To create a virtual environment do:
+After you clone the repo, follow these setup steps:
+
+## 1. Create a virtual environment:
 `python3 -m venv venv`
 
-## To activate it:
+## 2. Activate the virtual environment
+On macOS/Linux:
 `source venv/bin/activate`
 
-## To deactivate it:
-`deactivate`
+On Windows:
+`.\venv\Scripts\activate`
+
+## 3. Install Dependencies
+pip install -r requirements.txt
+
+## 4. Set up Environment variables
+Create a `.env` file inside `backend/app` directory and fill with the provided credentials
+
+## 5. Run the application
+- Go to `backend/app` directory
+- Run `flask run`
