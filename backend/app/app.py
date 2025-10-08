@@ -1,16 +1,7 @@
 from flask import Flask, jsonify
-from dotenv import load_dotenv
-import os
-from supabase import create_client, Client
-
-
-load_dotenv() # Load environment variables from .env
+from database import supabase
 
 app = Flask(__name__)
-
-url: str = os.getenv("SUPABASE_URL")
-key: str = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(url, key)
 
 
 # API Endpoints
