@@ -1,8 +1,10 @@
 from flask import Flask, jsonify
 from database import supabase
+from scripts.songs import songs_bp
 
 app = Flask(__name__)
 
+app.register_blueprint(songs_bp)
 
 # API Endpoints
 
