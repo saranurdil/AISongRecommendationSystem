@@ -1,8 +1,13 @@
 from flask import Flask, jsonify
 from database import supabase
 from scripts.songs import songs_bp
+from scripts.recommender import initialize_recommender
 
 app = Flask(__name__)
+
+# initialize the recommender once
+with app.app_context():
+    initialize_recommender()
 
 app.register_blueprint(songs_bp)
 
