@@ -86,3 +86,32 @@ def get_ml_recommendations(song_title):
     return df_sample[['track_name', 'artists', 'track_genre', 'track_search']].iloc[song_indices].to_dict(orient='records')
 
 
+def get_loaded_track_ids():
+    """
+    Return list of track_ids present in the in-memory df_sample.
+    Read-only; no model changes.
+    """
+    if df_sample is None or 'track_id' not in df_sample.columns:
+        return []
+    # ensure str for consistent comparison
+    return df_sample['track_id'].dropna().astype(str).tolist()
+
+
+def get_title_for_id(track_id):
+    """
+    If the given track_id is in the in-memory sample, return the normalized title
+    (track_search if available, else track_name). Otherwise return None.
+    """
+    if df_sample is None:
+        return None
+    # ensure same dtype comparison
+    mask = df_sample['track_id'].astype(str) == str(track_id)
+    if not mask.any():
+        return None
+    row = df_sample.loc[mask].iloc[0]
+    title = None
+    if 'track_search' in df_sample.columns and pd.notna(row.get('track_search')):
+        title = row.get('track_search')
+    elif 'track_name' in df_sample.columns and pd.notna(row.get('track_name')):
+        title = row.get('track_name')
+    return str(title).strip() if title else None
