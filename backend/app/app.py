@@ -3,6 +3,7 @@ from database import supabase
 from scripts.songs import songs_bp
 from scripts.recommender import initialize_recommender
 from flask_cors import CORS
+from ui import ui
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -12,6 +13,7 @@ with app.app_context():
     initialize_recommender()
 
 app.register_blueprint(songs_bp)
+app.register_blueprint(ui)
 
 # API Endpoints
 
