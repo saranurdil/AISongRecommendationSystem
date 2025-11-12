@@ -2,8 +2,10 @@ from flask import Flask, jsonify
 from database import supabase
 from scripts.songs import songs_bp
 from scripts.recommender import initialize_recommender
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # initialize the recommender once
 with app.app_context():
@@ -14,8 +16,13 @@ app.register_blueprint(songs_bp)
 # API Endpoints
 
 @app.route('/')
-def hello_world():
-    return 'Hello World'
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "song-recommender-api",
+        "version": "0.1.0",
+        "endpoints": ["/songs/search", "/songs/recommend", "/songs/details/<track_id>", "/test_connection"]
+    })
 
 # this is a test route
 @app.route('/test_connection')
