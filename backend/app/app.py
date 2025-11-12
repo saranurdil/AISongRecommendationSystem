@@ -14,8 +14,13 @@ app.register_blueprint(songs_bp)
 # API Endpoints
 
 @app.route('/')
-def hello_world():
-    return 'Hello World'
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "song-recommender-api",
+        "version": "0.1.0",
+        "endpoints": ["/songs/search", "/songs/recommend", "/songs/details/<track_id>", "/test_connection"]
+    })
 
 # this is a test route
 @app.route('/test_connection')
