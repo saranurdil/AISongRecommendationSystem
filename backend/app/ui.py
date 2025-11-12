@@ -33,7 +33,7 @@ def details_page(track_id):
     except Exception as e:
         data = {"error": str(e)}
     return render_template("details.html", song=data)
-
+# the legacy enpoint we have ("/songs/recommend") which is sample based is still there but the UI will now call the full db
 @ui.route("/recommend")
 def recommend_page():
     track_id = request.args.get("track_id")
