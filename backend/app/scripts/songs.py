@@ -48,10 +48,52 @@ def recommend_songs():
     if isinstance(recommendations, dict) and "error" in recommendations:
         return jsonify(recommendations), 404
 
+    # --- Enrich: attach track_id for each recommendation (Person-2 responsibility) ---
+    enriched = []
+    for rec in (recommendations or []):
+        # We'll try exact match on 'track_search' which your data includes
+        track_search = (rec.get("track_search") or "").strip()
+        track_name = (rec.get("track_name") or "").strip()
+        artists = (rec.get("artists") or "").strip()
+        tid = None
+
+        # Prefer lookup by track_search (normalized "Title - Artist")
+        if track_search:
+            try:
+                r = supabase.table('cleaned_tracks_set')\
+                    .select("track_id")\
+                    .eq("track_search", track_search)\
+                    .single()\
+                    .execute()
+                if r.data and "track_id" in r.data:
+                    tid = r.data["track_id"]
+            except Exception:
+                pass
+
+        # Fallback: try (track_name + artists) if needed
+        if not tid and track_name and artists:
+            try:
+                r2 = supabase.table('cleaned_tracks_set')\
+                    .select("track_id")\
+                    .eq("track_name", track_name)\
+                    .ilike("artists", f"{artists}%")\
+                    .limit(1)\
+                    .execute()
+                if r2.data and len(r2.data) > 0 and "track_id" in r2.data[0]:
+                    tid = r2.data[0]["track_id"]
+            except Exception:
+                pass
+
+        rec = dict(rec)
+        if tid:
+            rec["track_id"] = tid
+        enriched.append(rec)
+
     return jsonify({
         "input": target_song,
-        "recommendations": recommendations
+        "recommendations": enriched
     })
+
 
 
 @songs_bp.route('/search')
