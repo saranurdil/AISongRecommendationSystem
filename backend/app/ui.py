@@ -40,12 +40,20 @@ def recommend_page():
     song = request.args.get("song")
     payload = {}
     try:
+        params = {"k": 10}  # tweak if we want a different default
+        if request.args.get("k"): params["k"] = int(request.args.get("k"))
+        if request.args.get("same_genre") is not None:
+            params["same_genre"] = request.args.get("same_genre")
+
         if track_id:
-            r = requests.get(f"{API_BASE}/songs/recommend", params={"track_id": track_id})
+            params["track_id"] = track_id
         elif song:
-            r = requests.get(f"{API_BASE}/songs/recommend", params={"song": song})
+            params["song"] = song
         else:
             return redirect(url_for("ui.search_page"))
+
+        # Use the full-dataset recommender
+        r = requests.get(f"{API_BASE}/songs/recommend_full", params=params)
         payload = r.json()
     except Exception as e:
         payload = {"error": str(e)}

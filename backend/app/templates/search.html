@@ -30,22 +30,13 @@
             <div class="song-title">{{ r.track_name }}</div>
             <div class="song-artist">{{ r.artists }}</div>
             <div class="small" style="color:#c58ad9;">{{ r.album_name }}</div>
-            {% if r.in_sample %}
-              <span class="badge-good mt-2">Recommendable</span>
-            {% else %}
-              <span class="badge-good mt-2" style="opacity:.6;">Not in sample</span>
-            {% endif %}
           </div>
         </div>
 
         <!-- Right: actions -->
         <div class="col" style="align-items:flex-end;">
           <a class="btn-neon" href="{{ url_for('ui.details_page', track_id=r.track_id) }}">Details</a>
-          {% if r.in_sample %}
-            <a class="btn-neon mt-2" href="{{ url_for('ui.recommend_page') }}?track_id={{ r.track_id }}">Recommend</a>
-          {% else %}
-            <button class="btn-neon mt-2" disabled title="Not in current sample">Recommend</button>
-          {% endif %}
+          <a class="btn-neon mt-2" href="{{ url_for('ui.recommend_page') }}?track_id={{ r.track_id }}">Get Recommendations</a>
         </div>
       </div>
     </div>

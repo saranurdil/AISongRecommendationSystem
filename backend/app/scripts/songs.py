@@ -1,6 +1,10 @@
 from flask import Blueprint, request, jsonify
 from database import supabase
 from .recommender import get_ml_recommendations, get_loaded_track_ids, get_title_for_id
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics.pairwise import cosine_similarity
 
 songs_bp = Blueprint('songs_bp', __name__, url_prefix='/songs')
 
@@ -137,3 +141,94 @@ def get_song_details(track_id):
         return jsonify(res.data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@songs_bp.route('/recommend_full')
+def recommend_full():
+    """
+    Full-dataset recommendations (no dependency on in-memory sample).
+    Params:
+      - track_id OR song (prefer exact 'track_search' like 'Love Song - Sara Bareilles')
+      - k (int, default 10)
+      - same_genre (bool, default true)
+    """
+    target_song = request.args.get('song', type=str)
+    track_id = request.args.get('track_id', type=str)
+    k = request.args.get('k', default=10, type=int)
+    same_genre = request.args.get('same_genre', default='true', type=str).lower() == 'true'
+
+    if not (target_song or track_id):
+        return jsonify({"error": "Provide either 'song' or 'track_id'"}), 400
+
+    # --- 1) Resolve target row from DB ---
+    try:
+        if track_id:
+            t_res = supabase.table('cleaned_tracks_set')\
+                .select("*").eq("track_id", track_id).single().execute()
+            target = t_res.data
+        else:
+            # Prefer exact match on track_search = "Title - Artist"
+            t_res = supabase.table('cleaned_tracks_set')\
+                .select("*").eq("track_search", target_song).single().execute()
+            target = t_res.data
+            # Fallback: try track_name ilike (first match)
+            if not target:
+                t_res2 = supabase.table('cleaned_tracks_set')\
+                    .select("*").ilike("track_name", target_song).limit(1).execute()
+                target = (t_res2.data[0] if t_res2.data else None)
+        if not target:
+            return jsonify({"error": "Target song not found in database."}), 404
+    except Exception as e:
+        return jsonify({"error": f"DB lookup failed: {e}"}), 500
+
+    # --- 2) Fetch candidate rows (entire table or filtered by genre) ---
+    feature_cols = [
+        "danceability","energy","key","loudness","mode","speechiness",
+        "acousticness","instrumentalness","liveness","valence","tempo",
+        "time_signature","popularity","duration_ms"
+    ]
+    meta_cols = ["track_id","track_name","artists","track_genre","track_search"]
+
+    try:
+        base_query = supabase.table('cleaned_tracks_set').select(",".join(meta_cols + feature_cols))
+        if same_genre and target.get("track_genre"):
+            base_query = base_query.eq("track_genre", target["track_genre"])
+        c_res = base_query.limit(20000).execute()  # safety cap; adjust if needed
+
+        rows = c_res.data or []
+        # Exclude the target itself from candidates
+        rows = [r for r in rows if str(r.get("track_id")) != str(target.get("track_id"))]
+        if not rows:
+            return jsonify({"input": target.get("track_search") or target.get("track_name"), "recommendations": []})
+    except Exception as e:
+        return jsonify({"error": f"DB fetch failed: {e}"}), 500
+
+    # --- 3) Vectorize + similarity ---
+    try:
+        # Build DataFrame for candidates and a single-row DF for target
+        df = pd.DataFrame(rows)
+        # Ensure numeric dtype, replace missing with 0
+        for col in feature_cols:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+        t_vec = np.array([[pd.to_numeric(target.get(col), errors="coerce") if target.get(col) is not None else 0.0
+                           for col in feature_cols]], dtype=float)
+
+        X = df[feature_cols].astype(float).values
+        scaler = StandardScaler()
+        Xs = scaler.fit_transform(X)
+        ts = scaler.transform(t_vec)
+
+        sims = cosine_similarity(ts, Xs)[0]  # shape: (n_candidates,)
+        df["similarity"] = sims
+
+        # Top-k similar rows
+        top = df.sort_values("similarity", ascending=False).head(k)
+        recs = top[["track_id","track_name","artists","track_genre","track_search","similarity"]].to_dict(orient="records")
+
+        return jsonify({
+            "input": target.get("track_search") or target.get("track_name"),
+            "same_genre": same_genre,
+            "k": k,
+            "recommendations": recs
+        })
+    except Exception as e:
+        return jsonify({"error": f"Similarity failed: {e}"}), 500

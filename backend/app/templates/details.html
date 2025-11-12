@@ -5,6 +5,7 @@
   <div class="alert alert-danger">{{ song.error }}</div>
 {% else %}
   <div class="detail-card mt-4">
+    <button class="btn-neon" type="button" onclick="history.back()" title="Go back to results">← Back</button>
     <div class="col">
       <div class="detail-title">{{ song.track_name }}</div>
       <div class="detail-artist">{{ song.artists }}</div>
