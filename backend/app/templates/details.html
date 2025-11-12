@@ -1,24 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="h4 mb-3">Song Details</h1>
 
 {% if song.error %}
   <div class="alert alert-danger">{{ song.error }}</div>
 {% else %}
-  <div class="card">
-    <div class="card-body">
-      <h5 class="card-title">{{ song.track_name }}</h5>
-      <h6 class="card-subtitle mb-2 text-muted">{{ song.artists }}</h6>
-      <p class="card-text">
-        <strong>Album:</strong> {{ song.album_name }}<br>
-        <strong>Genre:</strong> {{ song.track_genre }}<br>
-        <strong>Tempo:</strong> {{ song.tempo }} BPM<br>
-        <strong>Valence:</strong> {{ song.valence }}<br>
-        <strong>Energy:</strong> {{ song.energy }}<br>
-      </p>
-      <a class="btn btn-primary" href="{{ url_for('ui.recommend_page') }}?track_id={{ song.track_id }}">Get Recommendations</a>
-      <a class="btn btn-outline-secondary" href="{{ url_for('ui.search_page') }}">Back to Search</a>
+  <div class="detail-card mt-4">
+    <div class="col">
+      <div class="detail-title">{{ song.track_name }}</div>
+      <div class="detail-artist">{{ song.artists }}</div>
+    </div>
+
+    <div class="mt-4 text-subtle">
+      <p><strong>Album:</strong> {{ song.album_name }}</p>
+      <p><strong>Genre:</strong> {{ song.track_genre }}</p>
+      <p><strong>Tempo:</strong> {{ song.tempo }} BPM</p>
+      <p><strong>Valence:</strong> {{ song.valence }}</p>
+      <p><strong>Energy:</strong> {{ song.energy }}</p>
+    </div>
+
+    <div class="mt-4 d-flex gap-3">
+      <a class="btn-neon" href="{{ url_for('ui.recommend_page') }}?track_id={{ song.track_id }}">Get Recommendations</a>
+      <a class="btn-neon" href="{{ url_for('ui.search_page') }}">Back to Search</a>
     </div>
   </div>
 {% endif %}
+
 {% endblock %}

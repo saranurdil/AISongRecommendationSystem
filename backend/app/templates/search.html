@@ -1,44 +1,58 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="h4 mb-3">Search Songs</h1>
-<form class="row g-2 mb-4" method="get" action="{{ url_for('ui.search_page') }}">
-  <div class="col-sm-9">
-    <input type="text" class="form-control" name="q" placeholder="Type a title (e.g., love)" value="{{ q or '' }}">
-  </div>
-  <div class="col-sm-3 d-grid">
-    <button class="btn btn-primary">Search</button>
-  </div>
-</form>
+
+<!-- Search header -->
+<div class="search-wrap">
+  <form method="get" action="{{ url_for('ui.search_page') }}" class="w-100" style="max-width: 720px;">
+    <input
+      type="text"
+      name="q"
+      class="search-input"
+      placeholder="Search a song to find its match"
+      value="{{ q or '' }}"
+      aria-label="Search songs"
+    >
+  </form>
+</div>
 
 {% if message %}
   <div class="alert alert-info">{{ message }}</div>
 {% endif %}
 
 {% if results %}
-  <div class="list-group">
-    {% for r in results %}
-      <div class="list-group-item d-flex justify-content-between align-items-start">
-        <div class="me-3">
-          <div class="fw-semibold">{{ r.track_name }}</div>
-          <div class="small text-muted">{{ r.artists }} • {{ r.album_name }}</div>
-          {% if r.in_sample %}
-            <span class="badge bg-success mt-2">Recommendable</span>
-          {% else %}
-            <span class="badge bg-secondary mt-2">Not in sample</span>
-          {% endif %}
+  {% for r in results %}
+    <div class="neon-card">
+      <div class="flex space-between">
+        <!-- Left: thumb + title/artist -->
+        <div class="flex">
+          <!-- If you later add real art URLs, replace this block with an <img> -->
+          <div class="col">
+            <div class="song-title">{{ r.track_name }}</div>
+            <div class="song-artist">{{ r.artists }}</div>
+            <div class="small" style="color:#c58ad9;">{{ r.album_name }}</div>
+            {% if r.in_sample %}
+              <span class="badge-good mt-2">Recommendable</span>
+            {% else %}
+              <span class="badge-good mt-2" style="opacity:.6;">Not in sample</span>
+            {% endif %}
+          </div>
         </div>
-        <div class="d-flex gap-2">
-          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('ui.details_page', track_id=r.track_id) }}">Details</a>
+
+        <!-- Right: actions -->
+        <div class="col" style="align-items:flex-end;">
+          <a class="btn-neon" href="{{ url_for('ui.details_page', track_id=r.track_id) }}">Details</a>
           {% if r.in_sample %}
-            <a class="btn btn-primary btn-sm" href="{{ url_for('ui.recommend_page') }}?track_id={{ r.track_id }}">Recommend</a>
+            <a class="btn-neon mt-2" href="{{ url_for('ui.recommend_page') }}?track_id={{ r.track_id }}">Recommend</a>
           {% else %}
-            <a class="btn btn-outline-primary btn-sm disabled" tabindex="-1" aria-disabled="true">Recommend</a>
+            <button class="btn-neon mt-2" disabled title="Not in current sample">Recommend</button>
           {% endif %}
         </div>
       </div>
-    {% endfor %}
-  </div>
+    </div>
+  {% endfor %}
+
 {% elif q %}
   <div class="alert alert-warning">No results.</div>
 {% endif %}
+
 {% endblock %}
