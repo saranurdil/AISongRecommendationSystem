@@ -2,8 +2,10 @@ from flask import Flask, jsonify
 from database import supabase
 from scripts.songs import songs_bp
 from scripts.recommender import initialize_recommender
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # initialize the recommender once
 with app.app_context():
