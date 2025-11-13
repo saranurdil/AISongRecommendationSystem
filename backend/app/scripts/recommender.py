@@ -2,7 +2,7 @@ import pandas as pd
 import os
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
-from database import supabase
+from database import load_tracks_data  # Import the new function
 import time
 
 # global variables
@@ -15,18 +15,16 @@ def initialize_recommender():
     global similarity_matrix, df_sample, indices
     print("Intializing recommender engine...")
 
-    # LOAD THE DATA
-    # fetch data from the database.
+    # LOAD THE DATA 
+    # featch data FROM CSV
     try:
-        response = supabase.table('cleaned_tracks_set').select('*').limit(10000).execute()
-
-        if not response.data:
-            print("Error. No data returned from Supabase")
+        df_sample = load_tracks_data()
+        
+        if df_sample is None or len(df_sample) == 0:
+            print("Error: No data loaded from CSV")
             return
 
-        # convert JSON response to DataFrame
-        df_sample = pd.DataFrame(response.data)
-        print(f"Loaded {len(df_sample)} records from the database")
+        print(f"Loaded {len(df_sample)} records from CSV")
 
         # ML PREPROCESSING
         numerical_features = ['danceability', 'energy', 'loudness', 'tempo', 'valence']

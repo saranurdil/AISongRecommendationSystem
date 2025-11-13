@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from database import supabase
+from database import load_tracks_data
 from .recommender import get_ml_recommendations, get_loaded_track_ids, get_title_for_id
 import pandas as pd
 import numpy as np
@@ -8,9 +8,40 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 songs_bp = Blueprint('songs_bp', __name__, url_prefix='/songs')
 
+# load data once
+df_full = load_tracks_data()
+
+def search_in_dataframe(df, track_id=None, track_search=None, track_name=None, artists=None):
+    """
+    search for tracks in the DataFrame
+    """
+    if df is None or len(df) == 0:
+        return None
+    
+    result = df.copy()
+    
+    if track_id:
+        result = result[result['track_id'].astype(str) == str(track_id)]
+    
+    if track_search:
+        # exact match for track_search
+        result = result[result['track_search'].str.lower() == track_search.lower()]
+    
+    if track_name and artists:
+        # match for track_name and partial match for artists
+        result = result[
+            (result['track_name'].str.lower() == track_name.lower()) & 
+            (result['artists'].str.lower().str.contains(artists.lower(), na=False))
+        ]
+    elif track_name:
+        # starts-with search for track_name
+        result = result[result['track_name'].str.lower().str.startswith(track_name.lower(), na=False)]
+    
+    return result
 
 @songs_bp.route('/recommend')
 def recommend_songs():
+
     # Accept either exact song title OR track_id
     target_song = request.args.get('song')
     track_id = request.args.get('track_id')
@@ -24,24 +55,19 @@ def recommend_songs():
         else:
             # Not in sample; we can still look up DB to confirm the id exists,
             # but we will return a clear message that recommendation needs an in-sample track.
-            try:
-                res = supabase.table('cleaned_tracks_set')\
-                    .select("track_name, track_search")\
-                    .eq("track_id", track_id)\
-                    .single()\
-                    .execute()
-                row = res.data
-                if not row:
-                    return jsonify({"error": f"No song found for track_id={track_id}"}), 404
-                return jsonify({
-                    "error": "This track is not in the currently loaded sample for recommendations.",
-                    "track_id": track_id,
-                    "track_name": row.get("track_name"),
-                    "track_search": row.get("track_search"),
-                    "hint": "Use /songs/search and pick a result where in_sample=true, then call /songs/recommend with that track_id."
-                }), 409
-            except Exception as e:
-                return jsonify({"error": str(e)}), 500
+            
+            result = search_in_dataframe(df_full, track_id=track_id)
+            if result is None or len(result) == 0:
+                return jsonify({"error": f"No song found for track_id={track_id}"}), 404
+            
+            row = result.iloc[0]
+            return jsonify({
+                "error": "This track is not in the currently loaded sample for recommendations.",
+                "track_id": track_id,
+                "track_name": row.get("track_name"),
+                "track_search": row.get("track_search"),
+                "hint": "Use /songs/search and pick a result where in_sample=true, then call /songs/recommend with that track_id."
+            }), 409
 
     if not target_song:
         return jsonify({"error": "Provide either 'song' (title) or 'track_id'"}), 400
@@ -60,33 +86,16 @@ def recommend_songs():
         track_name = (rec.get("track_name") or "").strip()
         artists = (rec.get("artists") or "").strip()
         tid = None
+        
+        # look up track_id from full dataset
+        result = search_tracks(track_search=track_search)
+        if result is not None and len(result) > 0:
+            tid = result.iloc[0]['track_id']
 
-        # prefer lookup by track_search (normalized "Title - Artist")
-        if track_search:
-            try:
-                r = supabase.table('cleaned_tracks_set')\
-                    .select("track_id")\
-                    .eq("track_search", track_search)\
-                    .single()\
-                    .execute()
-                if r.data and "track_id" in r.data:
-                    tid = r.data["track_id"]
-            except Exception:
-                pass
-
-        # fallback: try (track_name + artists) if needed
-        if not tid and track_name and artists:
-            try:
-                r2 = supabase.table('cleaned_tracks_set')\
-                    .select("track_id")\
-                    .eq("track_name", track_name)\
-                    .ilike("artists", f"{artists}%")\
-                    .limit(1)\
-                    .execute()
-                if r2.data and len(r2.data) > 0 and "track_id" in r2.data[0]:
-                    tid = r2.data[0]["track_id"]
-            except Exception:
-                pass
+        else:
+            # fallback: try (track_name + artists) if needed
+            result = search_tracks(track_name=track_name, artists=artists)
+            tid = result.iloc[0]['track_id'] if result is not None and len(result) > 0 else None
 
         rec = dict(rec)
         if tid:
@@ -109,21 +118,35 @@ def search_songs():
         return jsonify({"error": "A search query 'q' is required."}), 400
 
     try:
-        response = supabase.table('cleaned_tracks_set')\
-            .select("track_id, track_name, artists, album_name")\
-            .ilike('track_name', f'{search_query}%')\
-            .limit(20)\
-            .execute()
+        # search in the full dataset
+        if df_full is not None:
+
+            # partial matching
+            mask = df_full['track_name'].str.lower().str.contains(search_query.lower(), na=False)
+            results_df = df_full[mask]
+
+        else:
+            results_df = pd.DataFrame()
+        
+        # limit to 20 results
+        results_df = results_df.head(20)
         
         loaded_ids = set(get_loaded_track_ids())
-        for row in response.data:
-            tid = str(row.get("track_id", ""))
-            row["in_sample"] = (tid in loaded_ids)
-
+        results = []
+        
+        for _, row in results_df.iterrows():
+            result_item = {
+                "track_id": row.get("track_id"),
+                "track_name": row.get("track_name"),
+                "artists": row.get("artists"),
+                "album_name": row.get("album_name"),
+                "in_sample": (str(row.get("track_id")) in loaded_ids)
+            }
+            results.append(result_item)
 
         return jsonify({
-            "message": f"Found {len(response.data)} results for '{search_query}'", 
-            "results": response.data
+            "message": f"Found {len(results)} results for '{search_query}'", 
+            "results": results
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -131,14 +154,11 @@ def search_songs():
 @songs_bp.route('/details/<track_id>')
 def get_song_details(track_id):
     try:
-        res = supabase.table('cleaned_tracks_set')\
-            .select("*")\
-            .eq("track_id", track_id)\
-            .single()\
-            .execute()
-        if not res.data:
+        result = search_in_dataframe(df_full, track_id=track_id)
+        if result is None or len(result) == 0:
             return jsonify({"error": f"No song found for track_id={track_id}"}), 404
-        return jsonify(res.data)
+        
+        return jsonify(result.iloc[0].to_dict())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -159,70 +179,67 @@ def recommend_full():
     if not (target_song or track_id):
         return jsonify({"error": "Provide either 'song' or 'track_id'"}), 400
 
-    # 1) Resolve target row from DB
+    if df_full is None:
+        return jsonify({"error": "Dataset not loaded"}), 500
+
+    # resolve target row from DB
     try:
         if track_id:
-            t_res = supabase.table('cleaned_tracks_set')\
-                .select("*").eq("track_id", track_id).single().execute()
-            target = t_res.data
+            target_df = search_in_dataframe(df_full, track_id=track_id)
         else:
             # prefer exact match on track_search = "Title - Artist"
-            t_res = supabase.table('cleaned_tracks_set')\
-                .select("*").eq("track_search", target_song).single().execute()
-            target = t_res.data
-            # fallback: try track_name ilike (first match)
-            if not target:
-                t_res2 = supabase.table('cleaned_tracks_set')\
-                    .select("*").ilike("track_name", target_song).limit(1).execute()
-                target = (t_res2.data[0] if t_res2.data else None)
-        if not target:
-            return jsonify({"error": "Target song not found in database."}), 404
+            target_df = search_in_dataframe(df_full, track_search=target_song)
+            if target_df is None or len(target_df) == 0:
+                # fallback: try track_name ilike (first match)
+                target_df = search_in_dataframe(df_full, track_name=target_song)
+        
+        if target_df is None or len(target_df) == 0:
+            return jsonify({"error": "Target song not found in dataset."}), 404
+        
+        target = target_df.iloc[0]
     except Exception as e:
-        return jsonify({"error": f"DB lookup failed: {e}"}), 500
+        return jsonify({"error": f"Lookup failed: {e}"}), 500
 
-    # 2) Fetch candidate rows (entire table or filtered by genre) 
+    # fetch candidate rows (entire table or filtered by genre) 
     feature_cols = [
-        "danceability","energy","key","loudness","mode","speechiness",
-        "acousticness","instrumentalness","liveness","valence","tempo",
-        "time_signature","popularity","duration_ms"
+        'danceability', 'energy', 'loudness', 'tempo', 'valence'
     ]
-    meta_cols = ["track_id","track_name","artists","track_genre","track_search"]
+    meta_cols = ["track_id", "track_name", "artists", "track_genre", "track_search"]
 
     try:
-        base_query = supabase.table('cleaned_tracks_set').select(",".join(meta_cols + feature_cols))
+        # filter candidates
+        candidates = df_full.copy()
         if same_genre and target.get("track_genre"):
-            base_query = base_query.eq("track_genre", target["track_genre"])
-        c_res = base_query.limit(20000).execute()  # safety cap
-
-        rows = c_res.data or []
-        # Exclude the target itself from candidates
-        rows = [r for r in rows if str(r.get("track_id")) != str(target.get("track_id"))]
-        if not rows:
+            candidates = candidates[candidates['track_genre'] == target["track_genre"]]
+        
+        # exclude the target itself
+        candidates = candidates[candidates['track_id'] != target['track_id']]
+        
+        if len(candidates) == 0:
             return jsonify({"input": target.get("track_search") or target.get("track_name"), "recommendations": []})
-    except Exception as e:
-        return jsonify({"error": f"DB fetch failed: {e}"}), 500
 
-    # 3) vectorize + similarity
-    try:
-        # build DataFrame for candidates and a single-row DF for target
-        df = pd.DataFrame(rows)
+        # vectorize + similarity
+        # build DataFrame for candidates and target
+        df_candidates = candidates[meta_cols + feature_cols].copy()
+        
         # numeric dtype, replace missing with 0
         for col in feature_cols:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-        t_vec = np.array([[pd.to_numeric(target.get(col), errors="coerce") if target.get(col) is not None else 0.0
-                           for col in feature_cols]], dtype=float)
+            df_candidates[col] = pd.to_numeric(df_candidates[col], errors="coerce").fillna(0.0)
+        
+        # create target vector
+        t_vec = np.array([[pd.to_numeric(target.get(col, 0.0), errors="coerce") for col in feature_cols]], dtype=float)
 
-        X = df[feature_cols].astype(float).values
+        X = df_candidates[feature_cols].astype(float).values
         scaler = StandardScaler()
         Xs = scaler.fit_transform(X)
         ts = scaler.transform(t_vec)
 
         sims = cosine_similarity(ts, Xs)[0]  # shape: (n_candidates,)
-        df["similarity"] = sims
+        df_candidates["similarity"] = sims
 
-        # top-k similar rows
-        top = df.sort_values("similarity", ascending=False).head(k)
-        recs = top[["track_id","track_name","artists","track_genre","track_search","similarity"]].to_dict(orient="records")
+        # top-k similar songs
+        top = df_candidates.sort_values("similarity", ascending=False).head(k)
+        recs = top[["track_id", "track_name", "artists", "track_genre", "track_search", "similarity"]].to_dict(orient="records")
 
         return jsonify({
             "input": target.get("track_search") or target.get("track_name"),
@@ -231,4 +248,4 @@ def recommend_full():
             "recommendations": recs
         })
     except Exception as e:
-        return jsonify({"error": f"Similarity failed: {e}"}), 500
+        return jsonify({"error": f"Similarity calculation failed: {e}"}), 500

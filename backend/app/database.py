@@ -1,11 +1,16 @@
 import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
+import pandas as pd
 
-# Load environment variables
-load_dotenv()
-
-# Initialize the Supabase client once and export it
-url: str = os.getenv("SUPABASE_URL")
-key: str = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(url, key)
+# load data from CSV
+def load_tracks_data():
+    """
+    Load tracks data from the local CSV file
+    """
+    try:
+        csv_path = os.path.join(os.path.dirname(__file__), 'cleaned_tracks.csv')
+        df = pd.read_csv(csv_path)
+        print(f"Loaded {len(df)} records from CSV")
+        return df
+    except Exception as e:
+        print(f"Error loading CSV: {e}")
+        return None
