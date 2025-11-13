@@ -40,7 +40,7 @@ def recommend_page():
     song = request.args.get("song")
     payload = {}
     try:
-        params = {"k": 10}  # tweak if we want a different default
+        params = {"k": 5}  # tweak if we want a different default
         if request.args.get("k"): params["k"] = int(request.args.get("k"))
         if request.args.get("same_genre") is not None:
             params["same_genre"] = request.args.get("same_genre")

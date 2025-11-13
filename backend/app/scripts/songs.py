@@ -173,7 +173,7 @@ def recommend_full():
     """
     target_song = request.args.get('song', type=str)
     track_id = request.args.get('track_id', type=str)
-    k = request.args.get('k', default=10, type=int)
+    k = request.args.get('k', default=5, type=int)
     same_genre = request.args.get('same_genre', default='true', type=str).lower() == 'true'
 
     if not (target_song or track_id):
