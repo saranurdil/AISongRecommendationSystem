@@ -50,12 +50,19 @@ def test_connection():
 @app.route('/evaluate_model')
 def evaluate_model():
 
-    # pick a number of songs to test
-    # default to 100 for practicality and speed
-    n = request.args.get('n', default=100, type=int)
-    
-    avg_metrics = run_batch_evals(n_songs=n)
-    return jsonify(avg_metrics)
+    try: 
+        # pick a number of songs to test
+        # default to 100 for practicality and speed
+        n = request.args.get('n', default=100, type=int)
+
+        avg_metrics = run_batch_evals(n_songs=n)
+        return jsonify(avg_metrics)
+
+    except Exception as e:
+        print(f"Error in evaluate_model: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

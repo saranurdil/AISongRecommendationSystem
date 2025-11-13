@@ -88,13 +88,13 @@ def recommend_songs():
         tid = None
         
         # look up track_id from full dataset
-        result = search_tracks(track_search=track_search)
+        result = search_in_dataframe(track_search=track_search)
         if result is not None and len(result) > 0:
             tid = result.iloc[0]['track_id']
 
         else:
             # fallback: try (track_name + artists) if needed
-            result = search_tracks(track_name=track_name, artists=artists)
+            result = search_in_dataframe(track_name=track_name, artists=artists)
             tid = result.iloc[0]['track_id'] if result is not None and len(result) > 0 else None
 
         rec = dict(rec)

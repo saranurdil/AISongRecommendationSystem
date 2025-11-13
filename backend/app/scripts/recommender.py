@@ -2,7 +2,7 @@ import pandas as pd
 import os
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
-from database import load_tracks_data  # Import the new function
+from database import load_tracks_data
 import time
 
 # global variables
@@ -25,12 +25,23 @@ def initialize_recommender():
             return
 
         print(f"Loaded {len(df_sample)} records from CSV")
+        
+        # use a small sample for testing
+        sample_size = 2000
+        df_sample = df_sample.sample(sample_size, random_state=42)
+        print(f"Using sample of {sample_size} songs for testing")
 
         # ML PREPROCESSING
         numerical_features = ['danceability', 'energy', 'loudness', 'tempo', 'valence']
 
         # drop the rows if essential data is missing
+        initial_count = len(df_sample)
         df_sample = df_sample.dropna(subset=numerical_features + ['track_genre', 'track_search']).reset_index(drop=True)
+        print(f"After dropping NA: {len(df_sample)} records (removed {initial_count - len(df_sample)})")
+
+        if len(df_sample) == 0:
+            print("Error: No records left after dropping NA values")
+            return
 
         # scale the numeric values so that the model understands it
         scaler = MinMaxScaler()
@@ -110,17 +121,26 @@ def get_title_for_id(track_id):
     row = df_sample.loc[mask].iloc[0]
     title = None
     if 'track_search' in df_sample.columns and pd.notna(row.get('track_search')):
-        title = row.get('track_search')
+        return str(row.get('track_search')).strip()
     elif 'track_name' in df_sample.columns and pd.notna(row.get('track_name')):
-        title = row.get('track_name')
-    return str(title).strip() if title else None
-
+        return str(row.get('track_name')).strip()
+    return None
 
 def get_performance_metrics(song_title):
 
+    # Check if recommender is properly initialized
+    if df_sample is None or indices is None:
+        return {"error": "Recommender not properly initialized"}
+
+    song_title_lower = song_title.lower()
+
     # check if the song exists and get its details for comparison
     try:
-        input_song_details = df_sample.iloc[indices[song_title.lower()]]
+        if song_title_lower not in indices:
+            return {"error": f"Song '{song_title}' not found in the sample"}
+        
+        idx = indices[song_title_lower]
+        input_song_details = df_sample.iloc[idx]
         input_genre = input_song_details['track_genre']
         input_artist = input_song_details['artists']
 
@@ -139,6 +159,9 @@ def get_performance_metrics(song_title):
     # handle if the recommendation fails
     if isinstance(recommendations, dict) and "error" in recommendations:
         return {"error": recommendations["error"]}
+
+    if not recommendations:
+        return {"error": "No recommendations generated"}
 
     # calculate quality metrics
 
@@ -179,18 +202,27 @@ def run_batch_evals(n_songs=100):
     if df_sample is None:
         return {"error": "Recommender not initialized."}
 
+    # Ensure we don't request more songs than available
+    if n_songs > len(df_sample):
+        n_songs = len(df_sample)
+        print(f"Adjusting n_songs to {n_songs} (available samples)")
+
     # select songs to test
     test_songs = df_sample.sample(n_songs)
+    print(f"Selected {len(test_songs)} songs for evaluation")
 
     total_speed = 0
     total_genre_relevance = 0
     total_artist_diversity = 0
     successful_runs = 0
+    failed_runs = 0
 
     print(f"Running evaluation on {n_songs} random songs...")
 
-    for _, song in test_songs.iterrows():
+    for idx, (_, song) in enumerate(test_songs.iterrows()):
         song_title = song['track_search']
+        print(f"Processing {idx+1}/{n_songs}: {song_title}")
+        
         metrics = get_performance_metrics(song_title)
 
         if "error" not in metrics:
@@ -198,6 +230,12 @@ def run_batch_evals(n_songs=100):
             total_genre_relevance += metrics['metrics']['genre_relevance']
             total_artist_diversity += metrics['metrics']['artist_diversity']
             successful_runs += 1
+            print(f"  Success - Speed: {metrics['query_speed_ms']}ms")
+        else:
+            failed_runs += 1
+            print(f"  Failed: {metrics['error']}")
+
+    print(f"Evaluation complete: {successful_runs} successful, {failed_runs} failed")
 
     if successful_runs == 0:
         return {"error": "All evaluation runs failed."}
@@ -205,6 +243,7 @@ def run_batch_evals(n_songs=100):
     # return averages
     return {
         "total_songs_tested": successful_runs,
+        "failed_runs": failed_runs,
         "average_query_speed_ms": round(total_speed / successful_runs, 2),
         "average_genre_relevance": round(total_genre_relevance / successful_runs, 4),
         "average_artist_diversity": round(total_artist_diversity / successful_runs, 4)
