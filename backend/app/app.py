@@ -1,7 +1,7 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from database import supabase
 from scripts.songs import songs_bp
-from scripts.recommender import initialize_recommender
+from scripts.recommender import initialize_recommender, run_batch_evals
 from flask_cors import CORS
 from ui import ui
 
@@ -46,7 +46,14 @@ def test_connection():
         # return an error message
         return jsonify({"error": str(e)}), 500
 
+@app.route('/evaluate_model')
+def evaluate_model():
+    
+    # pick a number of songs to test, default to 100 for practicality and speed
+    n = request.args.get('n', default=100, type=int)
 
+    avg_metrics = run_batch_evals(n_songs=n)
+    return jsonify(avg_metrics)
 
 if __name__ == '__main__':
     app.run(debug=True)
